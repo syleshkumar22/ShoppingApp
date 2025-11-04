@@ -50,37 +50,77 @@ app.get('/api/ecommerce/cart', (req, res) => {
 });
 
 // Add product to cart (increment if exists)
+// POST /api/ecommerce/cart
 app.post('/api/ecommerce/cart', (req, res) => {
+  console.log('========== ADD TO CART REQUEST ==========');
+  console.log('Full request body:', JSON.stringify(req.body, null, 2));
+  
   const { product } = req.body;
+  
+  console.log('Extracted product:', product);
+  console.log('Product ID:', product?.id);
+  console.log('Product ID type:', typeof product?.id);
+  
+  if (!product || typeof product.id === 'undefined') {
+    console.log('❌ VALIDATION FAILED: Product or product.id is missing');
+    return res.status(400).json({ message: 'Product required' });
+  }
 
-  if (!product) return res.status(400).json({ message: 'Product required' });
+  console.log('✅ Validation passed, checking cart for product_id:', product.id);
 
-  // Check if product already in cart
   const checkSql = 'SELECT * FROM cart WHERE product_id = ?';
   db.query(checkSql, [product.id], (err, results) => {
-    if (err) return res.status(500).json({ message: 'Database error', error: err });
+    if (err) {
+      console.error('❌ DATABASE ERROR on SELECT:', err);
+      return res.status(500).json({ message: 'Database error', error: err.message });
+    }
+
+    console.log('Cart check results:', results);
+    console.log('Results length:', results.length);
 
     if (results.length > 0) {
-      // Already in cart → increment quantity
+      console.log('Product exists in cart, updating quantity');
       const updateSql = 'UPDATE cart SET quantity = quantity + 1 WHERE product_id = ?';
       db.query(updateSql, [product.id], (err2) => {
-        if (err2) return res.status(500).json({ message: 'Database error', error: err2 });
-        res.json({ message: 'Quantity updated' });
+        if (err2) {
+          console.error('❌ DATABASE ERROR on UPDATE:', err2);
+          return res.status(500).json({ message: 'Database error', error: err2.message });
+        }
+        console.log('✅ Quantity updated successfully');
+        return res.json({ message: 'Quantity updated' });
       });
     } else {
-      // Insert new product
+      console.log('Product NOT in cart, inserting new row');
+      console.log('Values to insert:', {
+        product_id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        image_url: product.image_url
+      });
+      
       const insertSql =
         'INSERT INTO cart (product_id, name, description, price, quantity, image_url) VALUES (?, ?, ?, ?, 1, ?)';
       const values = [
         product.id,
-        product.name,
+        product.name || '',
         product.description || '',
-        product.price,
+        product.price || 0.0,
         product.image_url || ''
       ];
+      
+      console.log('SQL:', insertSql);
+      console.log('Values array:', values);
+      
       db.query(insertSql, values, (err2) => {
-        if (err2) return res.status(500).json({ message: 'Database error', error: err2 });
-        res.json({ message: 'Product added' });
+        if (err2) {
+          console.error('❌ DATABASE ERROR on INSERT:', err2);
+          console.error('Error code:', err2.code);
+          console.error('Error sqlMessage:', err2.sqlMessage);
+          return res.status(500).json({ message: 'Database error', error: err2.message });
+        }
+        console.log('✅ Product added successfully');
+        return res.json({ message: 'Product added' });
       });
     }
   });
